@@ -1,0 +1,118 @@
+body
+{
+	padding: 0px;
+	margin: 0px;
+	background-image: url(../image/bg.png);
+	-webkit-tap-highlight-color:rgba(0,0,0,0);
+}
+a
+{
+	text-decoration:none;
+	color: black;
+}
+.clear
+{
+	clear: both;
+}
+#listBlock
+{
+	height: 55px;
+	width: 100%;
+}
+#backButton
+{
+	background-image: url(../image/btn_back.png);
+	text-align: right;
+	float: left;
+	width: 59px;
+	height: 35px;
+	font-size: 16px;
+	padding-right: 10px;
+	line-height: 35px;
+	color: white;
+	margin: 10px 0 10px 10px;
+}
+#listTitle
+{
+	background-image: url(../image/title.png);
+	position: fixed;
+	top: 0px;
+	left: 0px;
+	width: 100%;
+	-webkit-box-shadow: 0px 5px 5px rgba(0,0,0,0.5);
+}
+#aboutButton
+{
+	background-image: url(../image/btn_info.png);
+	text-align: center;
+	float: right;
+	width: 97px;
+	height: 35px;
+	font-size: 16px;
+	line-height: 35px;
+	color: white;
+	margin: 10px 10px 10px 0px;
+}
+#listTitleStr
+{
+	font-size: 16px;
+	line-height: 35px;
+	text-align: center;
+	color: white;
+	margin: 10px 0px 10px 0px;
+}
+.list_item
+{
+	margin: 5px;
+	background-color: whiteSmoke;
+	padding: 5px;
+}
+.item_left
+{
+	float: left;
+	background-image: url(../image/date_bg.png);
+	height: 56px;
+	width: 55px;
+}
+.left_YM
+{
+	font-size: 12px;
+	text-align: center;
+	color: white;
+	font-family: arial;
+	font-weight: bold;
+	line-height: 17px;
+}
+.left_date
+{
+	font-size: 35px;
+	font-family: arial;
+	font-weight: bold;
+	text-align: center;
+	line-height: 40px;
+}
+.item_right
+{
+	float: left;
+	margin-left: 15px;
+}
+.item_title
+{
+	font-size: 21px;
+}
+.item_time, .item_location
+{
+	margin-top: 5px;
+}
+.time_img, .location_img
+{
+	float: left;
+	height: 22px;
+}
+.time_str, .location_str
+{
+	font-size: 15px;
+	float: left;
+	margin-left: 5px;
+}
+

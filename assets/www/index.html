@@ -1,0 +1,501 @@
+<!DOCTYPE html>  
+<html>  
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	</head>
+	<script type="text/javascript" src="underscore.js"></script>
+	<script type="text/javascript" src="cordova-1.9.0.js"></script>
+	<script src="jquery.js" type="text/javascript"></script>
+	<script src="cet6.js" type="text/javascript"></script>
+	<script type="text/template" id="wordItem">
+		<tr id='word<%= id %>'>
+			<td>
+				<div class='eng'><%= id %>.<%= eng %></div>
+				<div class='chn'><%= chn %></div>
+				<div class='sentence' id='sentence<%= id %>'><%= sentence %></div>
+			</td>
+		</tr>
+	</script>
+	<script type="text/template" id="testItem">
+		<tr id='testWord' lastTestKind='<%= lastTestKind %>' realAns='<%= realAns %>' nextEnd='<%= nextEnd %>' nextStart='<%= nextStart %>'>
+			<td><div class='eng'><%= eng %></div></td>
+		</tr>
+		<tr class='chooseChn' id='ans0'><td><div class='chn'><%= chn0 %></div></td></tr>
+		<tr class='chooseChn' id='ans1'><td><div class='chn'><%= chn1 %></div></td></tr>
+		<tr class='chooseChn' id='ans2'><td><div class='chn'><%= chn2 %></div></td></tr>
+		<tr class='chooseChn' id='ans3'><td><div class='chn'><%= chn3 %></div></td></tr>
+	</script>
+	<style>
+		body
+		{
+			margin: 0px;
+			padding: 0px;
+		}
+		.eng, .chn, .sentence
+		{
+			//font-family: courier;
+			font-family: airal;
+		}
+		.eng
+		{
+			font-size: 30px;
+			color: #225;
+			padding: 10px 10px 0px 10px;
+			height: 30px;
+		}
+		.chn
+		{
+			font-size: 20px;
+			color: #252;
+			padding: 5px 10px 0px 10px;
+			height: 35px;
+		}
+		.sentence
+		{
+			font-size: 20px;
+			color: black;
+			padding: 0px 5px 0px 5px;
+		}
+		#headRow, #controlHead
+		{
+			background-color: #000;		
+		}
+		#headBlock
+		{
+			text-align: right;
+		}
+		#wordTable
+		{
+			height: 100%;
+			width: 100%;
+			background-color: #dfd;
+			position: absolute;
+			top: 0px;
+			left: 0px;
+			overflow: hidden;
+		}
+		
+	</style>
+	<link href="bootstrap/css/bootstrap.css" rel="stylesheet">
+	<script type="text/javascript">
+		document.addEventListener("deviceready", onDeviceReady, false);
+		//$(function(){onDeviceReady();});
+		var db;
+		var wordTemplate = null;
+		var testTemplate = null;
+        var saveTestStatus = function(mod, lastTestKind, rangeStart, rangeEnd, guideArray, guideIndex ) {
+            db.transaction(function(tran){                             
+                if ( mod == "1" )
+                {
+                    tran.executeSql("update status set mod = 1");
+                    tran.executeSql("update status set lastTestKind = "+lastTestKind);
+                    tran.executeSql("update status set rangeStart = "+rangeStart);
+                    tran.executeSql("update status set rangeEnd = "+rangeEnd);
+                    tran.executeSql("update status set guideArray = '"+JSON.stringify(guideArray)+"'");
+                    tran.executeSql("update status set guideIndex = "+guideIndex);
+                } else {
+                    tran.executeSql("update status set mod = 0");
+                }
+            });
+        }
+		function onDeviceReady(){
+			wordTemplate = _.template($('#wordItem').html());
+			testTemplate = _.template($('#testItem').html());
+			db = window.openDatabase("wordDB", "1.0", "words", 1024*1024);
+			//read the learn process
+			db.transaction(
+				function(tran){
+					tran.executeSql("select * from status limit 1", 
+						[],
+						function(tx, re){
+                            currentLearnIdx = re.rows.item(0).current;
+                            var mod = re.rows.item(0).mod;
+                            var lastTestKind = re.rows.item(0).lastTestKind;
+                            var rangeStart = re.rows.item(0).rangeStart;
+                            var rangeEnd = re.rows.item(0).rangeEnd;
+                            var guideArray = re.rows.item(0).guideArray;
+                            var guideIndex = re.rows.item(0).guideIndex;
+                            if ( mod == "0" )
+							{
+                                currentLearnIdx -= 3;
+                                learn(1);
+                            } else {
+                                createTest(lastTestKind-0, rangeStart-0, rangeEnd-0, eval("("+guideArray+")"), guideIndex-0);
+                            }
+						}
+					);
+				}
+			);
+			$("#resetBtn").bind("click", function(){
+				importIntoSql();
+			});
+			$("#resetStatusBtn").bind("click", function(){
+				
+			});
+			$("#nextBtn").bind("click", function(){
+				//如果没有超过最大学习位置，则向后翻，如果超过或等于则测试
+				if ( currentLearnIdx < maxLearnIdx )
+				{
+					learn(1);
+				}
+				else
+				{
+					$("#testBtn").hide();
+					$("#learnBtn").show();
+					$("#preBtn").hide();
+					$("#nextBtn").hide();
+					$("#backBtn").show();
+					tester();
+				}
+			});
+			$("#preBtn").bind("click", function(){
+				learn(-1);
+			});
+			$("#learnBtn").bind("click", function(){learnClick();});
+			$("#backBtn").bind("click", function(){learnClick();});
+			$("#learnBtn").hide();
+			$("#backBtn").hide();
+			$("#testBtn").bind("click", 
+				function(){
+					var guide = initRandomArray(0, currentLearnIdx+3);
+					createTest(1, 0, currentLearnIdx+3, guide, 0);
+				}
+			);
+			var learnClick = function(){
+				currentLearnIdx -= 3;
+				learn(1);
+				$("#learnBtn").hide();
+				$("#testBtn").show();
+				$("#preBtn").show();
+				$("#nextBtn").show();
+				$("#backBtn").hide();
+			}
+			var testClick = function(){
+				tester(1);
+				$("#testBtn").hide();
+				$("#learnBtn").show();
+				$("#preBtn").hide();
+				$("#nextBtn").hide();
+				$("#backBtn").show();
+			}
+			$("#selectSetZ").change(
+				function(e) {
+					if ( $("#selectSetZ").val() == "1") {
+						db.transaction(function(tran){
+							currentLearnIdx = -3;
+							maxLearnIdx = -3;
+								tran.executeSql("update status set current = 0");
+							}, errorCB, function(){learn(1);alert("Learning Process seted 0.");}
+						);
+					} else if ( $("#selectSetZ").val() == "2") {
+                        db.transaction(function(tran){                             
+							//tran.executeSql("drop table if exists status");      //当前学习进度               模式0为learn 1为test 之后的为createTest的参数，其中guideArray是以字符串存储的数组
+                            //tran.executeSql("create table if not exists status ( current integer default 0, mod default 0, lastTestKind integer, rangeStart integer, rangeEnd integer, guideArray text, guideIndex integer)");
+                            tran.executeSql("update status set mod = 0");
+                            tran.executeSql("select guideArray from status", 
+                                [],
+                                function(tran, results) {
+                                    alert(JSON.stringify(eval("("+results.rows.item(0).guideArray+")")));
+                                });
+                        });
+                    } else if ( $("#selectSetZ").val() == "3") {
+                        db.transaction(function(tran){                             
+                            tran.executeSql("update status set current = 188");
+                        });
+                    }
+					$("#selectSetZ").val("0");
+				}
+			);
+		}
+		var importIntoSql = function()
+		{
+			var re = window.confirm("Reset all learning plan?");
+			if (!re) 
+			{
+				db.transaction(countDB, errorCB);
+				return;
+			}
+			$("#wordBody").empty();
+			$("#wordBody").append(progressBarStr);
+			setTimeout(function(){
+					db.transaction(initDB, errorCB, function(){learn(1)});
+				}, 200);
+		}
+		var currentLearnIdx = -3;
+		var maxLearnIdx = -3;
+		var topCtlStr = "<thead id='headRow'>"+
+						"<th id='headBlock'>"+
+						"<div id='resetBtn' class='btn btn-danger btn-large' style='float: left;'><i class='icon-remove icon-white'></i>Reset</div>"+
+						"<div id='learnBtn' class='btn btn-primary btn-large'><i class='icon-home icon-white'></i>Learn</div>"+
+						"<div id='testBtn'  class='btn btn btn-large' style='margin-left: 8px;'><i class='icon-comment icon-black'></i>Test</div>"+
+						"</th>"+
+						"</thead>";
+		var bottomCtlStr = "<thead id='controlHead'>"+
+							"<td style='text-align: right;'>"+
+							"<div id='preBtn'  class='btn btn-primary btn-large'><i class='icon-chevron-left icon-white'></i>Pre</div>"+
+							"<div id='nextBtn' class='btn btn-inverse btn-large' style='margin-left: 8px;'>Next<i class='icon-chevron-right icon-white'></i></div>"+
+							"</td>"+
+							"</thead>";
+		var whiteStr = "<tr id='whiteTR'><td></td></tr>";
+		var progressBarStr = "<tr id='whiteTR'><td><div class='progress progress-striped active'><div id='progressBar' class='bar' style='width: 40%;'>0/"+cetData6.length+"</div></div></td></tr>";
+		var wordStr = "<tr>"+
+						"<td>"+
+						"<div class='eng'>ABC</div>"+
+						"<div class='chn'>哈哈哈</div>"+
+						"<div class='sentence'>ABCD ABC</div>"+
+						"</td>"+
+						"</tr>";
+		var learn = function(dir)
+		{
+            saveTestStatus(0);
+			if ( dir < 0 && currentLearnIdx <= 0 )
+			{
+				return;
+			}
+			if ( dir > 0 && currentLearnIdx >= (cetData6.length-1) )
+			{
+				return;
+			}
+			getWordData(dir);
+		}
+		var getWordData = function(dir) {
+			db.transaction(
+				function(tran) {
+					var dirSymbol = "";
+					if ( dir < 0 ) {
+						currentLearnIdx -= 3;
+						dirSymbol = "<";
+					}
+					else if ( dir > 0 ) {
+						currentLearnIdx += 3;
+						if ( currentLearnIdx > maxLearnIdx ) {
+							maxLearnIdx = currentLearnIdx;
+						}
+						dirSymbol = ">";
+					}
+					tran.executeSql("select * from words where id > "+currentLearnIdx+" limit 3", 
+						[],
+						function(tran, results) {
+							if ( results.rows.length <= 0 ) {
+								return;
+							}
+							$("#wordBody").empty();
+							for ( var idx = 0; idx < results.rows.length; idx++ ) {
+								var item = results.rows.item(idx);
+								var c = wordTemplate({
+									id:item.id,
+									eng:item.eng,
+									chn:item.chn,
+									sentence:"Tap to get example."
+								});
+								$("#wordBody").append(c);
+								$("#word"+item.id).bind("click", {it:item}, function(e){
+									var word = cetData6[e.data.it.id-1][0];
+									var itemid = e.data.it.id;
+									var voiceMedia = new Media("/android_asset/www/voiceCET6/"+word+".mp3", successCB, errorCB);
+									voiceMedia.play();
+									setTimeout(function(){
+										voiceMedia.release();
+									}, 3000);
+									$.getJSON("http://translate.google.cn/translate_a/ex?sl=zh-CN&tl=en&q="+word+"&utrans="+word,
+										function(data){
+											$("#sentence"+itemid).html(data[1][0][0][0]);
+										}
+									);
+								});
+								
+							}
+							//如果正向，则增加学习进度
+							if ( dir > 0 ) {
+								db.transaction(function(tran){
+										tran.executeSql("update status set current = "+currentLearnIdx);
+									}
+								);
+							}
+						}, errorCB);
+				}, errorCB);
+		}
+		function errorCB(err) {
+			alert("Error: "+err.code);
+		}
+		function successCB() {
+		}
+		function initDB(tx)
+		{
+			currentLearnIdx = -3;
+			maxLearnIdx = -3;
+			tx.executeSql("drop table if exists status");
+			tx.executeSql("create table if not exists status ( current integer default 0, mod default 0, lastTestKind integer, rangeStart integer, rangeEnd integer, guideArray text, guideIndex integer)");
+            tx.executeSql("insert into status (current) values (0)");
+            tx.executeSql("drop table if exists words");
+            tx.executeSql("create table if not exists words (id INTEGER PRIMARY KEY, eng text, chn text, sentence text, mark integer default 0, memory float default 0, type integer)");
+			for ( var i = 0; i < cetData6.length; i++ )
+			{
+				var query = "insert into words (eng, chn, sentence, mark, memory, type) values ('"+cetData6[i][0]+"', '"+cetData6[i][1]+"', '', 0, 0, 6);";
+				tx.executeSql(query);
+			}
+			$("#progressBar").text("100%");
+			$("#progressBar").css({"width":"100%"});
+		}
+		function countDB(tx)
+		{
+			tx.executeSql('SELECT * FROM words', [], alertCount, errorCB);
+		}
+		function alertCount(txx, re)
+		{
+			alert(txx+" "+re.rows.length);
+		}
+		var tester = function()	{
+			var learnIdx = currentLearnIdx/3;
+			//count the one num from the lower bit
+			var oneNum = 1;
+			for ( var i = 1, oneNum = 1; (i & learnIdx) != 0; i*=2, oneNum++ ){}
+			var ranStart = currentLearnIdx;
+			var ranEnd = currentLearnIdx+3;
+			var guideArray = initRandomArray(ranStart, ranEnd);
+			createTest(oneNum, ranStart, ranEnd, guideArray, 0);
+		}
+		var createTest = function( lastTestKind, rangeStart, rangeEnd, guideArray, guideIndex ) {
+            saveTestStatus(1, lastTestKind, rangeStart, rangeEnd, guideArray, guideIndex);
+			$("#wordBody").empty();
+			//如果此类测试结束
+			if ( guideIndex == guideArray.length ){
+				lastTestKind--;
+				rangeStart -= (rangeEnd-rangeStart);
+				lastTest = (rangeEnd-rangeStart)*1.5;
+				guideArray = initRandomArray(rangeStart, rangeEnd);
+				guideIndex = 0;
+			}
+			if ( rangeStart < 0 || lastTestKind <= 0 )
+			{
+				learn(1);
+				$("#learnBtn").hide();
+				$("#testBtn").show();
+				$("#preBtn").show();
+				$("#nextBtn").show();
+				$("#backBtn").hide();
+				return;
+			}
+			var selectRandomIdx = guideArray[guideIndex];
+			var randomRange = (cetData6.length-currentLearnIdx-3)*0.01+currentLearnIdx+3;
+			var selectChn = new Array(4);
+			for ( var i = 0; i < 4; i++) {
+				selectChn[i] = Math.floor(Math.random()*randomRange);
+				for ( var j = 0; j < i; ) {
+					if ( selectChn[j] == selectChn[i] || selectChn[i] == selectRandomIdx ) {
+						selectChn[i] = Math.floor(Math.random()*randomRange);
+					} else {
+						j++;
+					}
+				}
+			}
+			var realAns = Math.floor(Math.random()*4);
+			selectChn[realAns] = selectRandomIdx;
+			var c = testTemplate({
+						realAns:realAns,
+						lastTestKind:lastTestKind,
+						nextEnd:rangeEnd,
+						nextStart:rangeStart,
+						eng:cetData6[selectRandomIdx][0],
+						chn0:cetData6[selectChn[0]][1],
+						chn1:cetData6[selectChn[1]][1],
+						chn2:cetData6[selectChn[2]][1],
+						chn3:cetData6[selectChn[3]][1]
+					});
+			$("#wordBody").append(c);
+			$('#testWord').bind("click", {idx:selectRandomIdx}, function(e){
+				var voiceMedia = new Media("/android_asset/www/voiceCET6/"+cetData6[e.data.idx][0]+".mp3", successCB, errorCB);
+				voiceMedia.play();
+				setTimeout(function(){
+					voiceMedia.release();
+				}, 3000);
+			});
+			var voiceMedia = new Media("/android_asset/www/voiceCET6/"+cetData6[selectRandomIdx][0]+".mp3", successCB, errorCB);
+			voiceMedia.play();
+			setTimeout(function(){
+				voiceMedia.release();
+			}, 3000);
+			var arg = {};
+			arg.ltk = lastTestKind;
+			arg.rs = rangeStart;
+			arg.re = rangeEnd;
+			arg.ans = realAns;
+			arg.guide = guideArray;
+			arg.guideIdx = guideIndex;
+			$('#ans'+realAns).one('click', {arg:arg}, function(e){
+				$('#ans'+e.data.arg.ans).css({"background":"#B1C8FF"});
+				$('#ans'+e.data.arg.ans).css({"border":"5px solid #B1C8FF"});
+				var arg = e.data.arg;
+				//createTest(oneNum, ranStart, ranEnd, guideArray, 0);
+				createTest(arg.ltk, arg.rs, arg.re, arg.guide, arg.guideIdx+1);
+				/*$('#ans'+e.data.arg.ans).one('click', {arg:e.data.arg}, function(e){
+					arg = e.data.arg;
+					createTest(arg.ltk, arg.lt-1, arg.rs, arg.re);
+				});*/
+			});
+			for ( var i = 0; i < 4; i++)
+			{
+				if ( i != realAns )
+				{
+					$('#ans'+i).one('click', {arg:arg}, function(e){
+						$("#ans"+e.data.arg.ans).css({"background":"#FF8C57"});
+						$("#ans"+e.data.arg.ans).css({"border":"5px solid #FF8C57"});
+						$("#ans"+e.data.arg.ans).unbind('click');
+						$("#ans"+e.data.arg.ans).one('click', {arg:e.data.arg}, function(e){
+							var arg = e.data.arg;
+							createTest(arg.ltk, arg.rs, arg.re, arg.guide, arg.guideIdx);
+						});
+					});
+				}
+			}
+		}
+		var initRandomArray = function( start, end) {
+			var len = end - start;
+			var arr = new Array(len);
+			for ( var i = 0; i < len; i++) {
+				arr[i] = i+start;
+			}
+			for ( var i = len; i > 0; i--) {
+				var randNum = Math.floor(Math.random()*i);
+				if ( randNum != i-1 ) {
+					var temp = arr[randNum];
+					arr[randNum] = arr[i-1];
+					arr[i-1] = temp;
+				}
+			}
+			return arr;
+		}
+	</script>
+	<body scoll=no>
+		<div class='wordFrame'>
+			<table id='wordTable' class='table'>
+				<thead id='headRow'>
+					<th id='headBlock'>
+						<div id='resetBtn' class='btn btn-danger btn-large' style='float: left;'><i class='icon-remove icon-white'></i>Reset</div>
+						<select id="selectSetZ" style='float: left; height: 37px; width: 70px; margin-left: 8px;' class='btn btn-waring btn-large'>
+							<option value='0'>SetZ</option>
+							<option value='1'>Learning Process</option>
+							<option value='2'>All Score</option>
+							<option value='3'>All Mark</option>
+						</select>
+						<div id='learnBtn' class='btn btn-primary btn-large'><i class='icon-home icon-white'></i>Learn</div>
+						<div id='testBtn'  class='btn btn btn-large' style='margin-left: 8px;'><i class='icon-comment icon-black'></i>Test</div>
+					</th>
+				</thead>
+				<tbody id='wordBody'>
+					<tr id='whiteTR'>
+						<td></td>
+					</tr>
+				</tbody>
+				<thead id='controlHead'>
+					<td style='text-align: right;'>
+						<div id='preBtn'  class='btn btn-primary btn-large'><i class='icon-chevron-left icon-white'></i>Pre</div>
+						<div id='nextBtn' class='btn btn-inverse btn-large' style='margin-left: 8px;'>Next<i class='icon-chevron-right icon-white'></i></div>
+						<div id='backBtn' class='btn btn-info btn-large' style='margin-left: 8px;'><i class='icon-backward icon-white'></i>Back</div>
+					</td>
+				</thead>
+			</table>
+		</div>
+	</body>
+</html>
+
