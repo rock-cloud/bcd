@@ -199,8 +199,10 @@
                                 });
                         });
                     } else if ( $("#selectSetZ").val() == "3") {
+						var num = prompt("",currentLearnIdx) - 0;
+						num = num - num % 3 - 1;
                         db.transaction(function(tran){                             
-                            tran.executeSql("update status set current = 188");
+                            tran.executeSql("update status set current = "+num);
                         });
                     }
 					$("#selectSetZ").val("0");
